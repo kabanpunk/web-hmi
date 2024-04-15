@@ -1,38 +1,64 @@
 <template>
   <div class="bg-gray-200 h-screen p-5">
-    <button
-        @click="addShape"
-        class="block w-full mb-2 py-2 bg-blue-500 text-white font-bold rounded hover:bg-blue-700">
-      Добавить фигуру
-    </button>
-    <button
-        @click="removeSelected"
-        class="block w-full py-2 bg-red-500 text-white font-bold rounded hover:bg-red-700">
-      Удалить выбранное
-    </button>
-    <button @click="addPolygon" class="block w-full mb-2 py-2 bg-blue-500 text-white font-bold rounded hover:bg-blue-700">
-      Добавить полигон
-    </button>
-    <button @click="$emit('toggleEdit')" class="block w-full mb-2 py-2 bg-purple-500 text-white font-bold rounded hover:bg-purple-700">
-      Редактировать полигон
-    </button>
-    <button @click="$emit('startDrawingPolygon')" class="...">
-      Нарисовать полигон
-    </button>
+    <n-collapse default-expanded-names="1">
+      <n-collapse-item title="Простые фигуры" name="1">
+        <div class="grid grid-cols-4 gap-4">
+          <n-icon size="24" draggable="true" @dragstart="dragStart($event, 'circle')" class="mr-4">
+            <EllipseOutline/>
+          </n-icon>
+          <n-icon size="24" draggable="true" @dragstart="dragStart($event, 'square')" class="mr-4">
+            <TabletLandscapeOutline/>
+          </n-icon>
+
+          <n-icon size="24" draggable="true" @dragstart="dragStart($event, 'triangle')" class="mr-4">
+            <TriangleOutline/>
+          </n-icon>
+
+          <n-icon size="24" draggable="true" @dragstart="dragStart($event, 'polygon')" class="mr-4">
+            <GitCommitOutline/>
+          </n-icon>
+
+        </div>
+      </n-collapse-item>
+
+      <n-collapse-item title="Другие элементы" name="2">
+        <div class="grid grid-cols-4 gap-4">
+          <n-icon size="24" draggable="true" @dragstart="dragStart($event, 'vertical-indicator')" class="mr-4">
+            <ReorderFourOutline/>
+          </n-icon>
+
+          <n-icon size="24" draggable="true" @dragstart="dragStart($event, 'chart')" class="mr-4">
+            <BarChartOutline/>
+          </n-icon>
+        </div>
+      </n-collapse-item>
+    </n-collapse>
   </div>
 </template>
 
 <script>
+import {
+  EllipseOutline, TabletLandscapeOutline, TriangleOutline, GitCommitOutline, ReorderFourOutline, BarChartOutline
+} from "@vicons/ionicons5";
+import {NCollapse, NCollapseItem, NIcon} from "naive-ui";
 
 export default {
   name: 'LeftSidebar',
-  props: {
-    addShape: Function,
-    removeSelected: Function,
-    addPolygon: Function,
-    toggleEdit: Function,
-    startDrawingPolygon: Function,
+  components: {
+    NCollapse,
+    NCollapseItem,
+    NIcon,
+    EllipseOutline,
+    TabletLandscapeOutline,
+    TriangleOutline,
+    GitCommitOutline,
+    ReorderFourOutline,
+    BarChartOutline
   },
-  emits: ['toggleEdit', 'startDrawingPolygon'],
+  methods: {
+    dragStart(event, shape) {
+      event.dataTransfer.setData("shape", shape);
+    }
+  },
 }
 </script>

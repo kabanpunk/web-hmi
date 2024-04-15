@@ -1,338 +1,151 @@
 <template>
-  <div class="h-full w-full" ref="canvasWrapper">
+  <div class="h-full w-full" ref="canvasWrapper" @dragover.prevent @drop="handleDrop">
     <canvas id="canvas"></canvas>
   </div>
 </template>
 
 <script>
 import {fabric} from 'fabric';
+import {CircleShape} from "@/components/graphicPrimitives/Circle/circle.ts";
+import {RectangleShape} from "@/components/graphicPrimitives/Rectangle/rectangle.ts";
+import {PolygonShape} from "@/components/graphicPrimitives/Polygon/polygon.ts";
+import {TriangleShape} from "@/components/graphicPrimitives/Triangle/triangle.ts";
+import {install} from 'chart-js-fabric'
+
+install(fabric)
+
+import {VerticalIndicator} from "@/components/baseElements/VerticalIndicator/VerticalIndicator.ts";
 
 export default {
-  name: 'CanvasComponent',
   data() {
     return {
-      isDrawingPolygon: false,
-      polygonPoints: [],
-      tempLine: null,
-      tempPolygon: null,
+      isSpacePressed: false
     };
   },
   mounted() {
-    this.$nextTick(() => {
-      this.initializeCanvas();
-    });
+    this.initializeCanvas();
+
+
   },
   methods: {
     initializeCanvas() {
       const wrapper = this.$refs.canvasWrapper;
-      const width = wrapper.offsetWidth;
-      const height = wrapper.offsetHeight;
-
       this.canvas = new fabric.Canvas('canvas', {
-        width,
-        height,
+        width: wrapper.offsetWidth,
+        height: wrapper.offsetHeight,
       });
 
-      this.canvas.on('mouse:down', (options) => this.handleMouseDown(options));
-      document.addEventListener('contextmenu', this.handleContextMenu);
-    },
-    addShape() {
-      const circle = new fabric.Circle({
-        radius: 20,
-        fill: 'green',
-        left: 100,
-        top: 100,
+      this.canvas.on('selection:created', (event) => {
+        this.$emit('update:selectedObject', event.selected[0]);
       });
-      this.canvas.add(circle);
-    },
-    removeSelected() {
-      const activeObject = this.canvas.getActiveObject();
-      if (activeObject) {
-        this.canvas.remove(activeObject);
-      }
-    },
-    addPolygon() {
-      // Точки и создание полигона аналогично вашему примеру
-      var points = [{
-        x: 50, y: 50
-      }, {
-        x: 50, y: 100
-      }, {
-        x: 100, y: 100
-      }, {
-        x: 100, y: 50
-      }];
 
-      var polygon = new fabric.Polygon(points, {
-        stroke: 'red',
-        fill: 'rgba(255,0,0,0.5)',
-        objectCaching: false,
-        transparentCorners: false,
-        cornerColor: 'blue',
+      this.canvas.on('selection:updated', (event) => {
+        this.$emit('update:selectedObject', event.selected[0]);
       });
-      this.canvas.add(polygon);
-    },
 
-    editPolygon() {
-      const polygon = this.canvas.getActiveObject();
-      if (!polygon || polygon.type !== 'polygon') {
-        console.error('Не выбран полигон для редактирования');
-        return;
-      }
+      this.canvas.on('selection:cleared', () => {
+        console.log("Selection cleared");
+        this.$emit('update:selectedObject', null);
+      });
 
-      polygon.edit = !polygon.edit;
+      // Прокрутка колёсика мыши для масштабирования
+      this.canvas.on('mouse:wheel', (opt) => {
+        const delta = opt.e.deltaY;
+        let zoom = this.canvas.getZoom();
+        zoom *= 0.999 ** delta;
+        if (zoom > 20) zoom = 20;
+        if (zoom < 0.01) zoom = 0.01;
+        this.canvas.zoomToPoint({x: opt.e.offsetX, y: opt.e.offsetY}, zoom);
+        opt.e.preventDefault();
+        opt.e.stopPropagation();
 
-      if (polygon.edit) {
-        const lastControl = polygon.points.length - 1;
-        polygon.cornerStyle = 'circle';
-        polygon.cornerColor = 'rgba(0,0,255,0.5)';
+      });
 
-
-        polygon.controls = polygon.points.reduce((acc, point, index) => {
-          const pointIndex = index;
-          acc['p' + pointIndex] = new fabric.Control({
-            positionHandler: (dim, finalMatrix, fabricObject) => {
-              return this.polygonPositionHandler(pointIndex, dim, finalMatrix, fabricObject);
-            },
-            actionHandler: this.anchorWrapper(index > 0 ? index - 1 : lastControl, this.actionHandler),
-            actionName: 'modifyPolygon',
-            pointIndex: pointIndex,
-          });
-          return acc;
-        }, {});
-      } else {
-        polygon.cornerColor = 'blue';
-        polygon.cornerStyle = 'rect';
-        polygon.controls = fabric.Object.prototype.controls;
-
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-        polygon.points.forEach((point) => {
-          if (point.x < minX) minX = point.x;
-          if (point.y < minY) minY = point.y;
-          if (point.x > maxX) maxX = point.x;
-          if (point.y > maxY) maxY = point.y;
-        });
-
-        const width = maxX - minX;
-        const height = maxY - minY;
-
-        polygon.set({
-          width: width,
-          height: height,
-          pathOffset: new fabric.Point(minX + width / 2, minY + height / 2)
-        });
-
-        polygon.setCoords();
-        this.canvas.requestRenderAll();
-      }
-      polygon.hasBorders = !polygon.edit;
-      this.canvas.requestRenderAll();
-    },
-
-    polygonPositionHandler(pointIndex, dim, finalMatrix, fabricObject) {
-      const point = fabricObject.points[pointIndex];
-      const x = point.x - fabricObject.pathOffset.x;
-      const y = point.y - fabricObject.pathOffset.y;
-      return fabric.util.transformPoint(
-          {x, y}, fabric.util.multiplyTransformMatrices(
-              fabricObject.canvas.viewportTransform,
-              fabricObject.calcTransformMatrix()
-          )
-      );
-    },
-
-    actionHandler(eventData, transform, x, y) {
-      const polygon = transform.target,
-          currentControl = polygon.controls[polygon.__corner],
-          mouseLocalPosition = polygon.toLocalPoint(new fabric.Point(x, y), 'center', 'center'),
-          polygonBaseSize = this.getObjectSizeWithStroke(polygon),
-          size = polygon._getTransformedDimensions(0, 0),
-          finalPointPosition = {
-            x: mouseLocalPosition.x * polygonBaseSize.x / size.x + polygon.pathOffset.x,
-            y: mouseLocalPosition.y * polygonBaseSize.y / size.y + polygon.pathOffset.y
-          };
-      console.log("Действие обработчика для контрола:", currentControl, finalPointPosition);
-      polygon.points[currentControl.pointIndex] = finalPointPosition;
-      return true;
-    },
-
-    anchorWrapper(anchorIndex, fn) {
-      return function (eventData, transform, x, y) {
-        const fabricObject = transform.target;
-        console.log("Обёртка якоря для точки:", anchorIndex);
-        const actionPerformed = fn.call(this, eventData, transform, x, y);
-        console.log("Действие выполнено:", actionPerformed);
-        return actionPerformed;
-      }.bind(this);
-    },
-
-    getObjectSizeWithStroke(object) {
-      const stroke = new fabric.Point(
-          object.strokeUniform ? 1 / object.scaleX : 1,
-          object.strokeUniform ? 1 / object.scaleY : 1
-      ).multiply(object.strokeWidth);
-      const sizeWithStroke = new fabric.Point(object.width + stroke.x, object.height + stroke.y);
-      console.log("Размер объекта со штрихом:", sizeWithStroke);
-      return sizeWithStroke;
-    },
-
-    startDrawingPolygon() {
-      this.isDrawingPolygon = true;
-      this.polygonPoints = [];
-      if (this.tempPolygon) {
-        this.canvas.remove(this.tempPolygon);
-      }
-      if (this.tempLine) {
-        this.canvas.remove(this.tempLine);
-      }
-      this.tempPolygon = null;
-      this.tempLine = null;
-    },
-    handleMouseDown(options) {
-      if (!this.isDrawingPolygon) return;
-      const pointer = this.canvas.getPointer(options.e);
-      this.polygonPoints.push({x: pointer.x, y: pointer.y});
-
-      if (this.polygonPoints.length > 1) {
-        // Рисуем временную линию между последними двумя точками
-        if (this.tempLine) {
-          this.canvas.remove(this.tempLine);
+      // Перетаскивание холста при зажатом SPACE
+      this.canvas.on('mouse:down', (opt) => {
+        if (this.isSpacePressed && opt.e.button === 0) {
+          this.canvas.isDragging = true;
+          this.canvas.selection = false;
+          this.canvas.lastPosX = opt.e.clientX;
+          this.canvas.lastPosY = opt.e.clientY;
         }
-        const [lastPoint, secondLastPoint] = this.polygonPoints.slice(-2);
-        this.tempLine = new fabric.Line([secondLastPoint.x, secondLastPoint.y, lastPoint.x, lastPoint.y], {
-          stroke: 'red',
-          selectable: false,
-          evented: false,
-        });
-        this.canvas.add(this.tempLine);
-      }
-
-      // Обновляем временный полигон
-      if (this.tempPolygon) {
-        this.canvas.remove(this.tempPolygon);
-      }
-      if (this.polygonPoints.length > 2) {
-        this.tempPolygon = new fabric.Polygon(this.polygonPoints, {
-          stroke: 'red',
-          fill: 'rgba(255,0,0,0.3)',
-          selectable: false,
-          evented: false,
-        });
-        this.canvas.add(this.tempPolygon);
-      }
-
-      this.canvas.renderAll();
-    },
-    handleContextMenu(event) {
-      event.preventDefault();
-
-
-      if (this.isDrawingPolygon) {
-        if (this.polygonPoints.length < 3) return;
-
-        this.isDrawingPolygon = false;
-        this.canvas.remove(this.tempLine);
-        this.canvas.remove(this.tempPolygon);
-
-        var polygon = new fabric.Polygon(this.polygonPoints, {
-          stroke: 'red',
-          fill: 'rgba(255,0,0,0.5)',
-          objectCaching: false,
-          transparentCorners: false,
-          cornerColor: 'blue',
-        });
-        this.canvas.add(polygon);
-
-        this.polygonPoints = [];
-        this.tempLine = null;
-        this.tempPolygon = null;
-        this.canvas.renderAll();
-
-      } else if (this.canvas.getActiveObject() && this.canvas.getActiveObject().type === 'polygon' && this.canvas.getActiveObject().edit) {
-        console.log("Добавление новой точки к активному полигону");
-        this.addPointToPolygon(event);
-      }
-    },
-
-    addPointToPolygon(event) {
-      const pointer = this.canvas.getPointer(event);
-      const polygon = this.canvas.getActiveObject();
-
-      polygon.points.push({x: pointer.x - polygon.left, y: pointer.y - polygon.top });
-
-      this.canvas.remove(polygon);
-      const newPolygon = new fabric.Polygon(polygon.points, {
-        ...polygon.toObject(),
-        objectCaching: false,
-        transparentCorners: false,
       });
-      newPolygon.edit = true;
 
-      const lastControl = newPolygon.points.length - 1;
-      newPolygon.cornerStyle = 'circle';
-      newPolygon.cornerColor = 'rgba(0,0,255,0.5)';
+      this.canvas.on('mouse:move', (opt) => {
+        if (this.canvas.isDragging) {
+          let e = opt.e;
+          this.canvas.relativePan({x: e.clientX - this.canvas.lastPosX, y: e.clientY - this.canvas.lastPosY});
+          this.canvas.lastPosX = e.clientX;
+          this.canvas.lastPosY = e.clientY;
 
+        }
+      });
 
-      newPolygon.controls = newPolygon.points.reduce((acc, point, index) => {
-        const pointIndex = index;
-        acc['p' + pointIndex] = new fabric.Control({
-          positionHandler: (dim, finalMatrix, fabricObject) => {
-            return this.polygonPositionHandler(pointIndex, dim, finalMatrix, fabricObject);
-          },
-          actionHandler: this.anchorWrapper(index > 0 ? index - 1 : lastControl, this.actionHandler),
-          actionName: 'modifyPolygon',
-          pointIndex: pointIndex,
-        });
-        return acc;
-      }, {});
+      this.canvas.on('mouse:up', () => {
+        this.canvas.isDragging = false;
+        this.canvas.selection = true;
+      });
 
+      // Обработчики нажатий клавиш
+      document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+          this.isSpacePressed = true;
+        }
+      });
 
-      this.canvas.add(newPolygon);
-      this.canvas.setActiveObject(newPolygon);
-
-      this.canvas.requestRenderAll();
+      document.addEventListener('keyup', (e) => {
+        if (e.code === 'Space') {
+          this.isSpacePressed = false;
+        }
+      });
     },
 
-    getAbsolutePoint(polygon, point) {
-      return {
-        x: polygon.left + point.x * polygon.scaleX,
-        y: polygon.top + point.y * polygon.scaleY
-      };
-    },
 
-    distanceToLine(point, lineStart, lineEnd) {
-      const A = point.x - lineStart.x;
-      const B = point.y - lineStart.y;
-      const C = lineEnd.x - lineStart.x;
-      const D = lineEnd.y - lineStart.y;
+    handleDrop(event) {
+      const shape = event.dataTransfer.getData("shape");
+      const rect = this.canvas.lowerCanvasEl.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
 
-      const dot = A * C + B * D;
-      const lenSq = C * C + D * D;
-      const param = lenSq !== 0 ? dot / lenSq : -1;
-
-      let xx, yy;
-
-      if (param < 0) {
-        xx = lineStart.x;
-        yy = lineStart.y;
-      } else if (param > 1) {
-        xx = lineEnd.x;
-        yy = lineEnd.y;
-      } else {
-        xx = lineStart.x + param * C;
-        yy = lineStart.y + param * D;
+      switch (shape) {
+        case 'circle':
+          new CircleShape(this.canvas, x, y);
+          break;
+        case 'square':
+          console.log(this.canvas.toJSON())
+          new RectangleShape(this.canvas, x, y);
+          break;
+        case 'triangle':
+          new TriangleShape(this.canvas, x, y);
+          break;
+        case 'polygon':
+          new PolygonShape(this.canvas, x, y);
+          break;
+        case 'vertical-indicator':
+          new VerticalIndicator(this.canvas, x, y);
+          break;
+        case 'chart':
+          // TODO: Separate! Use: https://github.com/yassilah/chart-js-fabric/issues/4
+          this.canvas.add(new fabric.Chart({
+            width: 100,
+            height: 100,
+            chart: {
+              type: 'bar',
+              data: {
+                labels: ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange'],
+                datasets: [
+                  {
+                    label: '# of Votes',
+                    data: [Math.random(), Math.random()],
+                    backgroundColor: ['rgba(255, 99, 132, 0.2)', 'rgba(54, 162, 235, 0.2)']
+                  }
+                ]
+              }
+            }
+          }))
+          break;
       }
-
-      const dx = point.x - xx;
-      const dy = point.y - yy;
-      return Math.sqrt(dx * dx + dy * dy);
     },
-
-
-  },
-  beforeDestroy() {
-    document.removeEventListener('contextmenu', this.handleContextMenu);
-  },
+  }
 }
 </script>
