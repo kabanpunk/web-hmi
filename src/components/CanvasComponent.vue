@@ -112,8 +112,8 @@ export default {
           new CircleShape(this.canvas, x, y);
           break;
         case 'square':
-          console.log(this.canvas.toJSON())
           new RectangleShape(this.canvas, x, y);
+          console.log(JSON.stringify(this.canvas.toJSON(), null, 2));
           break;
         case 'triangle':
           new TriangleShape(this.canvas, x, y);

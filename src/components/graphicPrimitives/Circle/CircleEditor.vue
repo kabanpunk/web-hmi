@@ -72,7 +72,7 @@
       </template>
 
       <div class="flex">
-        <BlocklyComponent ref="blockly" :shape="shape" :external-variables="['SIGNAL1', 'SIGNAL2', 'SCORE']" :internal-variables="['LEFT', 'TOP', 'FILL']"/>
+        <BlocklyComponent ref="blockly" :shape="shape"/>
       </div>
 
       <template #footer>
